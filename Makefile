@@ -1,6 +1,8 @@
-TANKS_SRCS := $(wildcard *.a)
+PROGRAM_SRCS := $(wildcard *.a)
 
 tanks: tanks.d64
+
+tanks.prg: $(PROGRAM_SRCS)
 
 test: tanks.d64 tanks.vice
 	$(X128) \
