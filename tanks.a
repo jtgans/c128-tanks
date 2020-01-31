@@ -125,7 +125,7 @@ Main:
     lda #TankDown / 64
     sta SpritePtrStart
     +SetSpritePosition 0, 15, 57
-	lda #Color_LtRed
+	lda #Color_Red
 	sta SpriteColorStart
  	
     lda #TankUp / 64
