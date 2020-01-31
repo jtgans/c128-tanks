@@ -32,6 +32,9 @@
     SpritePosStart   = $d000
 	SpriteXMSB       = $d010
 
+	Joystick2     = $dc00
+    Joystick1     = $dc01
+
 	TextStart     = $0400
 	SpriteEn      = $d015
 	BgColor       = $D021
@@ -134,6 +137,23 @@ Main:
 	lda #Color_LtBlue
     sta SpriteColorStart + 1
 	
+	ldx #$08
+.loop:
+    lda #Bullet / 64
+    sta SpritePtrStart, x
+	lda #$01
+    sta SpriteColorStart, x
+    dex
+    cpx #$06
+    bne .loop
+	
+	+SetSpritePosition 7, 100, 100
+	+SetSpritePosition 6, 105, 100
+	+SetSpritePosition 5, 110, 100
+	+SetSpritePosition 4, 115, 100
+	+SetSpritePosition 3, 120, 100
+	+SetSpritePosition 2, 125, 100
+
     lda #$ff
 	sta SpriteEn
 	
@@ -143,10 +163,149 @@ Main:
 !zone Globals {	
 SysISRPtr:     !by $00
 SysISRPtrHi:   !by $00
+
+Player1Bullets:  !by $00, $00, $00
+Player2Bullets:  !by $00, $00, $00
+PlayerFacing:    !by DirDown, DirUp
+PlayerBulletCnt: !by $00, $00
+	
+DirUp           = %.......1
+DirDown         = %......1.
+DirLeft         = %.....1..
+DirRight        = %....1...
+	
+BulletSpeed = 4
 }
 	
+!zone UpdateBullets {
+UpdateBullets:
+    ldx #$06
+.loop:
+    lda Player1Bullets, x
+	lsr
+    bcc .up
+    lsr
+    bcc .down
+    lsr
+    bcc .left
+    lsr
+    bcc .right
+	jmp .out
+
+.up:
+    lda SpritePosStart + 1, x
+	sec
+    sbc #BulletSpeed
+	jmp .out
+	
+.down:
+    lda SpritePosStart + 1, x
+	clc
+    adc #BulletSpeed
+    jmp .out
+	
+.left:
+	lda SpritePosStart, x
+	sec
+    sbc #BulletSpeed
+    jmp .out
+	
+.right:
+	lda SpritePosStart, x
+    clc
+    adc #BulletSpeed
+
+.out:
+	dex
+    bne .loop
+    rts
+}	
+
+!zone SpawnBullet {
+SpawnBullet:
+    lda PlayerBulletCnt
+    cmp #$03
+    beq .out
+	
+    tax
+	lda PlayerFacing
+    sta Player1Bullets, x
+	
+.out:
+	rts
+}
+
 !zone InterruptCallback {
 InterruptCallback:
+	;; Update tank position based upon Joystick 2
+	lda Joystick2
+
+.ckup:  
+    lsr
+    bcs .ckdown
+	dec SpritePosStart + 1
+	dec SpritePosStart + 1
+    ldx #TankUp / 64
+    stx SpritePtrStart
+	ldx #DirUp
+    stx PlayerFacing
+	jmp .ckfire
+    
+.ckdown:
+    lsr
+    bcs .ckleft
+	inc SpritePosStart + 1
+	inc SpritePosStart + 1
+    ldx #TankDown / 64
+    stx SpritePtrStart
+	ldx #DirDown
+    stx PlayerFacing
+	jmp .ckfire
+	
+.ckleft:
+    lsr
+    bcs .ckright
+	dec SpritePosStart
+	dec SpritePosStart
+    ldx #TankLeft / 64
+    stx SpritePtrStart
+	ldx #DirLeft
+    stx PlayerFacing
+	jmp .ckfire
+	
+.ckright:
+    lsr
+    bcs .ckfire
+	inc SpritePosStart
+	inc SpritePosStart
+    ldx #TankRight / 64
+    stx SpritePtrStart
+	ldx #DirRight
+    stx PlayerFacing
+	jmp .ckfire
+	
+.ckfire:    
+    lsr
+	bcs .skip
+	jsr SpawnBullet
+
+.skip:
+    ;; Update tank position based upon Joystick 2
+	
+
+    ;; Update bullet positions
+	jsr UpdateBullets
+
+	;; Check for collisions
+
+	;; Cycle bullet colors
+	ldx #$08
+.loop:
+	inc SpriteColorStart, x
+    dex
+	cpx #$01
+    bne .loop
+
 	;; Give control back to the system ISR
 	jmp (SysISRPtr)
 }
