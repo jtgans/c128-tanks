@@ -108,8 +108,9 @@ SetSpritePosition:
 	* = $1300
 	
 Main:   
-    ;; Disable BASIC IRQ
-    lda #$01
+    ;; Disable BASIC IRQs
+    lda #$ff
+	sta $d8
     sta $12fd
 	
 	;; Disable BASIC, leave I/O, Kernal, and Character ROMs
