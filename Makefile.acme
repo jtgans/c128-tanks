@@ -1,0 +1,28 @@
+# -*- make *-*
+
+X128  := x128
+C1541 := c1541
+ACME  := acme
+LD    := ldo65
+
+ACMEFLAGS := -f cbm --cpu 6510 -v
+
+clean::
+	rm -f *.prg *.vice *.d64
+
+%.vice: %.a %.prg Makefile.acme
+	$(ACME) $(ACMEFLAGS) --vicelabels $(patsubst %.prg,%.vice,$@) $<
+
+%.prg: %.a Makefile.acme
+	$(ACME) $(ACMEFLAGS) -o $@ $<
+
+%.d64: %.prg Makefile.acme
+	( \
+		echo format \"$(patsubst %.d64,%,$@),ff\" d64 $@ 8; \
+		echo attach $@ 8;                                   \
+		echo write $< $(patsubst %.prg,%,$<)                \
+	) | $(C1541)
+
+.PRECIOUS: %.prg %.vice %.d64
+
+.PHONY: clean

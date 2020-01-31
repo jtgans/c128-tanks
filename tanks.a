@@ -1,0 +1,300 @@
+;; -*- asm -*-
+	
+;; Border Control Memory 53280
+;; Background Control Memory 53281
+    
+!source "macros.a"
+!source "sprites.a"
+
+!zone BASIC {
+	* = $1c01
+	
+	!wo  .EndOfText             ; Pointer to end of text
+    !wo  $000a                  ; Line number 10
+    !pet $9e, "4864", $00       ; SYS4864\0
+    !by  $00, $00               ; End of Text Token
+.EndOfText:
+}
+	
+!addr {
+!zone ZeroPage {
+}
+
+!zone SystemVarsAndRegisters {
+	IRQHandlerPtr   = $0314
+    IRQHandlerPtrHi = $0315
+	
+	CustomChars   = $2000
+	Character_ROM = $d000
+	
+    SpritePtrStart   = $07f8
+	SpriteColorStart = $d027
+    SpritePosStart   = $d000
+	SpriteXMSB       = $d010
+
+	TextStart     = $0400
+	SpriteEn      = $d015
+	BgColor       = $D021
+	BorderColor   = $D020
+	
+    MMU_Control   = $ff00
+}    
+}
+	
+;;; A - sprite number
+;;; X - x position
+;;; Y - y position
+!zone SetSpritePosition {
+!macro SetSpritePosition .no, .x, .y {
+	lda #.no
+    ldx #.x
+    ldy #.y
+    jsr SetSpritePosition
+}
+
+SetSpritePosition:  
+	;; Save the sprite number for later
+	sta .spriteNumber
+	
+	;; Save Y and X for later
+    tya
+    pha
+	txa
+    pha
+
+	;; Setup the index to offset
+	lda .spriteNumber
+	asl                         ; multiply by 2 since stride is 2
+    tay
+	
+	;; Store X position without the msb
+.setXCoordinate:
+    pla                         ; Pull X position from stack
+	asl                         ; MSB is now in carry
+    sta SpritePosStart, y
+	
+.prepMsbBit:
+	lda #$00
+	;; Get sprite number so we can find the MSB
+    ldx .spriteNumber
+	inx                         ; offset by one to count rotating from carry
+.loop:
+    rol                         ; rotate carry into A
+    dex
+	bne .loop                   ; repeat until bit in the right place
+
+    cmp #$00
+    bne .setMsb
+.clearMsb:
+    eor #$ff                    ; Invert so we make a mask
+    and SpriteXMSB              ; Mask out the bit
+    jmp .finish
+.setMsb:
+	ora SpriteXMSB              ; Just set the bit
+.finish:
+    sta SpriteXMSB
+
+.setYCoordinate:
+	iny                         ; Point at the Y coord
+	pla                         ; Pull Y position from stack
+    sta SpritePosStart, y
+	
+    rts
+	
+.spriteNumber: !by $00
+}    
+
+!zone Main {
+	* = $1300
+	
+Main:   
+    ;; Disable BASIC IRQ
+    lda #$01
+    sta $12fd
+	
+	;; Disable BASIC, leave I/O, Kernal, and Character ROMs
+	lda #$00
+    sta MMU_Control
+	
+	jsr ClearTextScreen
+	jsr FadeToBlack
+    jsr TransferCharSet
+    jsr WedgeInterruptRoutine
+	
+    lda #TankDown / 64
+    sta SpritePtrStart
+    +SetSpritePosition 0, 15, 57
+	lda #Color_LtRed
+	sta SpriteColorStart
+ 	
+    lda #TankUp / 64
+    sta SpritePtrStart + 1
+	+SetSpritePosition 1, 155, 225
+	lda #Color_LtBlue
+    sta SpriteColorStart + 1
+	
+    lda #$ff
+	sta SpriteEn
+	
+	jmp HandleInput
+}
+	
+!zone Globals {	
+SysISRPtr:     !by $00
+SysISRPtrHi:   !by $00
+}
+	
+!zone InterruptCallback {
+InterruptCallback:
+	;; Give control back to the system ISR
+	jmp (SysISRPtr)
+}
+
+!zone WedgeInterruptRoutine {
+WedgeInterruptRoutine:
+	sei
+	
+    lda IRQHandlerPtr
+    sta SysISRPtr
+    lda IRQHandlerPtrHi
+    sta SysISRPtrHi
+
+    lda #<InterruptCallback
+    sta IRQHandlerPtr
+    lda #>InterruptCallback
+    sta IRQHandlerPtrHi
+
+	cli
+    rts
+}
+
+!zone HandleInput {
+HandleInput:
+    jmp HandleInput
+}
+	
+;;; Transfers the ROM character set
+!zone TransferCharSet {
+	.charPtr      = $fb
+	.charPtrHi    = $fc
+	.tileSetPtr   = $fd
+    .tileSetPtrHi = $fe
+
+TransferCharSet:
+	;; Enable Charset mapping
+	lda #$01
+    sta MMU_Control
+	
+    lda #$d0
+    sta .charPtrHi
+    lda #$00
+    sta .charPtr
+	
+    lda #$20
+    sta .tileSetPtrHi
+    lda #$00
+    sta .tileSetPtr
+
+.nextpage:
+	ldy #$00
+.loop:
+	lda (.charPtr), y
+    sta (.tileSetPtr), y
+	iny
+    bne .loop
+	
+    inc .charPtrHi
+    inc .tileSetPtrHi
+    lda .charPtrHi
+    cmp $df
+    bne .nextpage
+
+	lda #$00
+    sta MMU_Control
+	
+    rts
+}
+
+!zone FadeToBlack {
+.border: !by 15, 12, 11, 0
+.backgd: !by 13, 15, 11,  0
+	
+FadeToBlack:
+    ldx #$00
+.loop:
+    lda .border, x
+    sta BgColor
+    lda .backgd, x
+    sta BorderColor
+	beq +
+	
+	ldy #100
+    jsr BusyDelay                   
+	inx
+	
+	jmp .loop
++
+	
+    rts
+}
+
+!zone ClearTextScreen {
+ClearTextScreen:    
+    ldx #$00
+	
+!macro .SetToMaxChar .address {
+	lda .address, x
+    cmp #$20
+    beq +
+
+    lda #127
+    sta .address, x
++
+}
+	
+.loop:   
+	+.SetToMaxChar TextStart
+    +.SetToMaxChar TextStart + $100
+    +.SetToMaxChar TextStart + $200
+    +.SetToMaxChar TextStart + $300
+    inx
+	bne .loop
+    
+!macro .DecToZero .address {
+    lda .address, x
+    cmp #$20
+    beq +
+    dec .address, x
++
+}
+	
+	ldy #128
+.dec_loop:
+	+.DecToZero TextStart
+	+.DecToZero TextStart + $100
+	+.DecToZero TextStart + $200
+	+.DecToZero TextStart + $300
+    inx
+    bne .dec_loop
+    dey
+    bne .dec_loop
+    rts
+}
+
+;;; BusyDelay
+;;; Y - number of times to wait
+!zone BusyDelay {
+BusyDelay:
+	+SaveRegisters
+    ldx #$00
+	
+.loop:
+    inx
+    bne .loop
+    dey
+    bne .loop
+	
+	+RestoreRegisters
+	
+    rts
+}
