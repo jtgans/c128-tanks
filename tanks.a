@@ -139,12 +139,20 @@ GameLoop:
 
 !zone HandleInput {
 HandleInput:
+	;; ShadowSpritePos is coordinate pairs, so we have to have a stride of two
+    ;; to index into it. Store in X so we can use both player number (Y) and
+    ;; ShadowSpritePos offsets.
+	txa
+	tay
+    asl
+    tax
+
 	;; Update tank position based upon Joystick
 	sei
     lda #$ff
 	sta $dc00
     sta $d02f
-	lda Joystick2, x
+	lda Joystick2, y
 	cli
 	
 	lsr
@@ -161,57 +169,57 @@ HandleInput:
 
 .ckleft:
 !zn {
-	lda ShadowSpritePos, x
+	lda ShadowSpritePos, x      ; stride 2
 	cmp #0
 	beq +
-    dec ShadowSpritePos, x
+    dec ShadowSpritePos, x      ; stride 2
 	
 +   lda #TankLeft / 64
-    sta SpritePtrStart, x
+    sta SpritePtrStart, y
 	lda #DirLeft
-    sta SpriteFacing, x
+    sta SpriteFacing, y
     rts
 }
 
 .ckup:
 !zn {
-    lda ShadowSpritePos + 1, x
+    lda ShadowSpritePos + 1, x  ; stride 2
 	cmp #0
     beq +
-    dec ShadowSpritePos + 1, x
+    dec ShadowSpritePos + 1, x  ; stride 2
 
 +   lda #TankUp / 64
-    sta SpritePtrStart, x
+    sta SpritePtrStart, y
 	lda #DirUp
-    sta SpriteFacing, x
+    sta SpriteFacing, y
     rts
 }
 
 .ckright:
 !zn {
-	lda ShadowSpritePos, x
+	lda ShadowSpritePos, x      ; stride 2
 	cmp #MaxXCoord
 	beq +
-    inc ShadowSpritePos, x
+    inc ShadowSpritePos, x      ; stride 2
 	
 +   lda #TankRight / 64
-    sta SpritePtrStart, x
+    sta SpritePtrStart, y
 	lda #DirRight
-    sta SpriteFacing, x
+    sta SpriteFacing, y
     rts
 }
 
 .ckdown:
 !zn {
-    lda ShadowSpritePos + 1, x
+    lda ShadowSpritePos + 1, x  ; stride 2
 	cmp #MaxYCoord
     beq +
-	inc ShadowSpritePos + 1, x
+	inc ShadowSpritePos + 1, x  ; stride 2
 	
 +   lda #TankDown / 64
-    sta SpritePtrStart, x
+    sta SpritePtrStart, y
 	lda #DirDown
-    sta SpriteFacing, x
+    sta SpriteFacing, y
     rts
 }
 
