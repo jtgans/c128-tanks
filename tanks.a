@@ -45,6 +45,7 @@
     VIC_Raster      = $d012
 	VIC_Interrupt   = $d019
 	VIC_SpSpCollide = $d01e
+	VIC_Keyboard    = $d02f
 }
 }
 
@@ -110,31 +111,205 @@ GameLoop:
 	lda #$00
 	sta FrameStartFlag
 
-	;; Set the border color based upon collision
-	lda CollisionFlag
-    tax
-	
-    bne .borderRed
-.borderBlack:
-    lda #Color_Black
-	jmp .next
-.borderRed:
-	lda #Color_LtRed
-.next:
-    sta BorderColor
-	
-	;; Clear the collision flag
-	lda #$00
-    sta CollisionFlag
+FrameStart:
+	jsr HandleCollision
 
+	;; Handle input for both 1st and 2nd player
 	ldx #$00
 	jsr HandleInput
 	inx
 	jsr HandleInput
 
-	;; jsr UpdateBullets
+	jsr UpdateBullets
+	jsr FixupPositions
+	jsr HandleTimers
+	jsr MarkDeadSprites
 
     jmp GameLoop
+}
+
+!zone MarkDeadSprites {
+MarkDeadSprites:
+	lda #0
+	ldx #2                      ; skip tanks
+
+.loop:
+    lda SpriteFacing, x
+	bne .next
+
+    ;; Value is zero, mark as dead
+	lda #Blank / 64
+    sta SpritePtrStart, x
+
+.next:
+    inx
+    cpx #$08
+    bne .loop
+
+    rts
+}
+
+!zone HandleTimers {
+HandleTimers:
+    lda ShootDelayCounter
+    beq .nextPlayer
+	dec ShootDelayCounter
+
+.nextPlayer:
+    lda ShootDelayCounter + 1
+    beq .return
+    dec ShootDelayCounter + 1
+
+.return:
+    rts
+}
+
+!zone HandleCollision {
+HandleCollision:
+	;; Set the border color based upon collision
+	lda CollisionFlag
+    tax
+
+    bne .borderRed
+.borderBlack:
+    lda #Color_Black
+	jmp .next
+.borderRed:
+	lda #Color_Red
+.next:
+    sta BorderColor
+
+	;; Clear the collision flag
+	lda #$00
+    sta CollisionFlag
+
+	rts
+}
+
+!zone FixupPositions {
+FixupPositions:
+	ldx #$00
+	ldy #$00
+
+.checkX:
+    lda ShadowSpritePos, x
+	cmp #MaxXCoord
+    bcc .checkY                 ; If X > MaxXCoord, we're out of bounds
+
+    ;; Set direction to zero, since we've been stopped
+	pha
+	lda #$00
+	sta SpriteFacing, y
+    pla
+
+	;; Compare to the midpoint of OOB space
+	cmp #((256 - MaxXCoord) >> 1) + MaxXCoord
+    bcc .setMaxX                ; Set to max X or min X, depending on which is closer
+    bcs .setMinX
+.setMaxX:
+    lda #MaxXCoord
+	jmp .storeX
+.setMinX:
+    lda #0
+.storeX:
+    sta ShadowSpritePos, x
+
+.checkY:
+    lda ShadowSpritePos + 1, x
+	cmp #MaxYCoord
+    bcc .next                   ; If Y > MaxYCoord, we're out of bounds
+
+    ;; Set direction to zero, since we've been stopped
+	pha
+	lda #$00
+	sta SpriteFacing, y
+    pla
+
+	;; Compare to the midpoint of OOB space
+    cmp #((256 - MaxYCoord) >> 1) + MaxXCoord
+	bcc .setMaxY                ; Set to max Y or min Y, depending on which is closer
+    bcs .setMinY
+.setMaxY:
+    lda #MaxYCoord
+    jmp .storeY
+.setMinY:
+	lda #0
+.storeY:
+	sta ShadowSpritePos + 1, x
+
+.next:
+	inx
+	inx
+	iny
+
+    cpx #$0f
+	bmi .checkX
+
+    rts
+}
+
+!zone UpdateBullets {
+UpdateBullets:
+	;; Start from sprite 2 -- we increment at the top of the loop
+	ldx #$01
+    txa
+
+	;; Multiply by 2 for stride
+    asl
+    tay
+
+	;; X contains the facing offset
+    ;; Y contains the position offset
+.next:
+	inx
+    iny
+    iny
+
+    cpx #$08
+    beq .return                 ; Stop at 8
+
+    lda SpriteFacing, x
+	beq .next                   ; Skip dead sprites
+
+	lsr
+    bcs .moveUp
+	lsr
+    bcs .moveDown
+    lsr
+    bcs .moveLeft
+    lsr
+    bcs .moveRight
+
+.return:
+    rts
+
+.moveUp:
+	lda ShadowSpritePos + 1, y
+	clc
+    adc #-BulletSpeed
+	sta ShadowSpritePos + 1, y
+    jmp .next
+
+.moveDown:
+	lda ShadowSpritePos + 1, y
+	clc
+    adc #BulletSpeed
+	sta ShadowSpritePos + 1, y
+    jmp .next
+
+.moveLeft:
+	lda ShadowSpritePos, y
+	clc
+    adc #-BulletSpeed
+	sta ShadowSpritePos, y
+	jmp .next
+
+.moveRight:
+	lda ShadowSpritePos, y
+	clc
+    adc #BulletSpeed
+	sta ShadowSpritePos, y
+    jmp .next
 }
 
 !zone HandleInput {
@@ -147,34 +322,39 @@ HandleInput:
     asl
     tax
 
+	;; X contains the coordinate pair offset (stride 2)
+    ;; Y contains the player number offset (stride 1)
+
 	;; Update tank position based upon Joystick
 	sei
     lda #$ff
-	sta $dc00
-    sta $d02f
-	lda Joystick2, y
+	sta Joystick2               ; Force joystick outputs on (shared with keyboard)
+    sta VIC_Keyboard            ; Force VIC-II keyboard outputs on (shared with joystick)
+	lda Joystick2, y            ; Safe to read joystick now (keyboard won't interfere)
 	cli
-	
-	lsr
-    bcc .ckup
-    lsr
-    bcc .ckdown
-    lsr
-    bcc .ckleft
-    lsr
-    bcc .ckright
-    lsr
+
+	;; Shift left so we can skip past bits 5-7 and check fire first
+	asl
+    asl
+	asl
+
+    asl
     bcc .ckfire
+    asl
+    bcc .ckright
+	asl
+    bcc .ckleft
+    asl
+    bcc .ckdown
+    asl
+    bcc .ckup
     rts
 
 .ckleft:
 !zn {
-	lda ShadowSpritePos, x      ; stride 2
-	cmp #0
-	beq +
     dec ShadowSpritePos, x      ; stride 2
-	
-+   lda #TankLeft / 64
+
+    lda #TankLeft / 64
     sta SpritePtrStart, y
 	lda #DirLeft
     sta SpriteFacing, y
@@ -183,12 +363,9 @@ HandleInput:
 
 .ckup:
 !zn {
-    lda ShadowSpritePos + 1, x  ; stride 2
-	cmp #0
-    beq +
     dec ShadowSpritePos + 1, x  ; stride 2
 
-+   lda #TankUp / 64
+    lda #TankUp / 64
     sta SpritePtrStart, y
 	lda #DirUp
     sta SpriteFacing, y
@@ -197,12 +374,9 @@ HandleInput:
 
 .ckright:
 !zn {
-	lda ShadowSpritePos, x      ; stride 2
-	cmp #MaxXCoord
-	beq +
     inc ShadowSpritePos, x      ; stride 2
-	
-+   lda #TankRight / 64
+
+    lda #TankRight / 64
     sta SpritePtrStart, y
 	lda #DirRight
     sta SpriteFacing, y
@@ -211,12 +385,9 @@ HandleInput:
 
 .ckdown:
 !zn {
-    lda ShadowSpritePos + 1, x  ; stride 2
-	cmp #MaxYCoord
-    beq +
 	inc ShadowSpritePos + 1, x  ; stride 2
-	
-+   lda #TankDown / 64
+
+    lda #TankDown / 64
     sta SpritePtrStart, y
 	lda #DirDown
     sta SpriteFacing, y
@@ -224,7 +395,69 @@ HandleInput:
 }
 
 .ckfire:
-	;; Spawn bullet if possible
+!zn {
+	lda ShootDelayCounter, y
+    bne +                       ; If our counter isn't zero, don't spawn
+
+	;; Setup the shooting delay
+    lda #ShootDelay
+	sta ShootDelayCounter, y
+
+	jsr MaybeSpawnBullet
++   rts
+}
+}
+
+!zone MaybeSpawnBullet {
+MaybeSpawnBullet:
+    ;; X and Y are configured thusly:
+    ;; Y: player number
+
+	;; Find a free slot in the facing array
+    ;; If zero:
+	;;   Set sprite shape pointer
+    ;;   Copy facing from player facing direction
+    ;;   Copy sprite pos from player position
+    ;; Else:
+    ;;   Return
+
+    ;; Find a free slot in the facing array
+    ldx #$02
+.loop:
+    lda SpriteFacing, x
+	beq .foundFreeSlot
+	inx
+    cpx #$08
+    bne .loop
+    rts                         ; Didn't find a free slot
+
+.foundFreeSlot:
+    ;; X contains the free slot number
+
+    ;; Set the sprite shape
+    lda #Bullet / 64
+    sta SpritePtrStart, x
+
+	;; Copy facing direction
+    lda SpriteFacing, y         ; from player
+    sta SpriteFacing, x         ; to bullet
+
+	;; Multiply slot number and player number by 2 to handle the striding of the
+    ;; position array.
+    tya
+    asl
+    tay
+
+    txa
+    asl
+    tax
+
+	;; Copy the position from the player
+    lda ShadowSpritePos, y
+    sta ShadowSpritePos, x
+    lda ShadowSpritePos + 1, y
+    sta ShadowSpritePos + 1, x
+
     rts
 }
 
@@ -235,15 +468,19 @@ SysISRPtrHi:   !by $00
 
 ;;; Tracks the direction the sprite last moved in. Zero means it is dead.
 SpriteFacing:    !fill 8,  $00
+SpriteFacingEnd:
 
 ;;; Shadow X/Y positions for sprites -- 255 max positions horizontally.
 ShadowSpritePos: !fill 16, $00
 ShadowSpritePosEnd:
-	
+
 FrameStartFlag:  !by $00
 FrameStartRasterLine = 250
-	
+
 CollisionFlag:   !by $00
+
+ShootDelayCounter:  !by $00, $00
+ShootDelay = 15                 ; 30 frames of delay between firing
 
 ;;; Direction flags
 DirUp           = %.......1
@@ -277,12 +514,12 @@ InterruptCallback:
 	;; Give control back to the system ISR
 	jmp (SysISRPtr)
 }
-	
+
 !zone CheckCollision {
 CheckCollision:
 	;; Save A, since we'll use it in other triggers
     pha
-	
+
 	;; Check if we were triggered because of a sprite collision
 	and #VIC_Int_SpSpCollide
 	beq .out
