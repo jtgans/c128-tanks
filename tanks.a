@@ -30,6 +30,7 @@
     Joystick1     = $dc01
 
     TextStart     = $0400
+    ColorStart    = $d800
     SpriteEn      = $d015
     BgColor       = $D021
     BorderColor   = $D020
@@ -40,13 +41,11 @@
     VIC_Interrupt   = $d019
     VIC_SpSpCollide = $d01e
     VIC_Keyboard    = $d02f
+    VIC_Collision   = $d01e
 }
 }
 
-!zone Init {
-    * = $1300
-
-!macro .InitSprite .spriteno, .shapePtr, .facing, .color, .x, .y {
+!macro InitSprite .spriteno, .shapePtr, .facing, .color, .x, .y {
     ;; Set sprite shape
     lda #.shapePtr / 64
     sta SpritePtrStart + .spriteno
@@ -66,6 +65,9 @@
     sta SpriteFacing + .spriteno
 }
 
+!zone Init {
+    * = $1300
+
 Init:
     cld
 
@@ -81,10 +83,10 @@ Init:
     jsr ClearTextScreen
     jsr FadeToBlack
 
-    +.InitSprite 0, TankDown, DirDown, Color_Red,    0, 0
-    +.InitSprite 1, TankUp,   DirUp,   Color_LtBlue, 148, 179
+    +InitSprite 0, TankDown, DirDown, Color_Red,    20, 20
+    +InitSprite 1, TankUp,   DirUp,   Color_LtBlue, 128, 159
 !for i, 2, 7 {
-    +.InitSprite i, Bullet,   0,       Color_Black,  0, (i - 2) * 10
+    +InitSprite i, Bullet,   0,       Color_Black,  74, 90
 }
 
     ;; Enable all sprites by default
@@ -131,6 +133,8 @@ GameLoop:
     sta FrameStartFlag
 
 FrameStart:
+    jsr HandleCollision
+
     ;; Handle input for both 1st and 2nd player
     ldx #$00
     jsr HandleInput
@@ -301,6 +305,10 @@ MaybeSpawnBullet:
     rts                         ; Didn't find a free slot
 
 .foundFreeSlot:
+    ;; To prevent accidental collision triggers, disable interrupts in this
+    ;; critical section
+    sei
+
     ;; X contains the free slot number
 
     ;; Set the sprite shape
@@ -327,31 +335,48 @@ MaybeSpawnBullet:
     lda ShadowSpritePos + 1, y
     sta ShadowSpritePos + 1, x
 
+    ;; Un-multiply to get the free slot number again
+    txa
+    lsr
+    tax
+
+    ;; Move the bullet early so it gets off the player
+    jsr UpdateSingleBullet
+
+    ;; Re-enable interrupts
+    cli
+
     rts
 }
 
 !zone UpdateBullets {
 UpdateBullets:
-    ;; Start from sprite 2 -- we increment at the top of the loop
-    ldx #$01
-    txa
+    ;; Start from sprite 3
+    lda #$02
+
+.next:
+    pha
+    jsr UpdateSingleBullet
+    pla
+    clc
+    adc #$01
+    cmp #$08
+    bne .next
+
+    rts
+}
+
+!zone UpdateSingleBullet {
+UpdateSingleBullet:
+    ;; Save the pre-multiplied value
+    tax
 
     ;; Multiply by 2 for stride
     asl
     tay
 
-    ;; X contains the facing offset
-    ;; Y contains the position offset
-.next:
-    inx
-    iny
-    iny
-
-    cpx #$08
-    beq .return                 ; Stop at 8
-
     lda SpriteFacing, x
-    beq .next                   ; Skip dead sprites
+    beq .return                   ; Skip dead sprites
 
     lsr
     bcs .moveUp
@@ -370,29 +395,81 @@ UpdateBullets:
     clc
     adc #-BulletSpeed
     sta ShadowSpritePos + 1, y
-    jmp .next
+    jmp .return
 
 .moveDown:
     lda ShadowSpritePos + 1, y
     clc
     adc #BulletSpeed
     sta ShadowSpritePos + 1, y
-    jmp .next
+    jmp .return
 
 .moveLeft:
     lda ShadowSpritePos, y
     clc
     adc #-BulletSpeed
     sta ShadowSpritePos, y
-    jmp .next
+    jmp .return
 
 .moveRight:
     lda ShadowSpritePos, y
     clc
     adc #BulletSpeed
     sta ShadowSpritePos, y
-    jmp .next
+    jmp .return
 }
+
+!zone HandleCollision {
+HandleCollision:
+.checkPlayer1:
+    lda CollisionFlag
+    and #%111111.1
+    beq .checkPlayer2
+
+    ldx #$0a
+-   inc SpriteColorStart
+    ldy #$20
+    jsr BusyDelay
+    dex
+    bne -
+
+    inc Player2Score
+    jmp .resetGame
+
+.checkPlayer2:
+    lda CollisionFlag
+    and #%1111111.
+    beq .return
+
+    ldx #$0a
+-   inc SpriteColorStart + 1
+    ldy #$20
+    jsr BusyDelay
+    dex
+    bne -
+
+    inc Player2Score
+    jmp .resetGame
+
+.return:
+    ;; Clear the collision flag
+    lda #$00
+    sta CollisionFlag
+
+    rts
+
+.resetGame:
+    +InitSprite 0, TankDown, DirDown, Color_Red,    20, 20
+    +InitSprite 1, TankUp,   DirUp,   Color_LtBlue, 128, 159
+!for i, 2, 7 {
+    +InitSprite i, Bullet,   0,       Color_Black,  74, 90
+}
+    ldy #100
+    jsr BusyDelay
+
+    jmp .return
+}
+
 
 !zone InterruptCallback {
 InterruptCallback:
@@ -401,10 +478,12 @@ InterruptCallback:
 
     ;; Check on the reason why we were called
     jsr MaybeTriggerFrame
+    jsr CheckCollision
 
     ;; Handle other functions not tightly coupled with the IRQs
     jsr UpdateSpritePositions
     jsr CycleBulletColors
+    jsr UpdateScore
 
     ;; Give control back to the system ISR
     jmp (SysISRPtr)
@@ -426,6 +505,26 @@ MaybeTriggerFrame:
     ;; Re-set the raster trigger
     lda #FrameStartRasterLine
     sta VIC_Raster
+
+.out:
+    pla
+    rts
+}
+
+!zone CheckCollision {
+CheckCollision:
+    ;; Save A, since we'll use it in other triggers
+    pha
+
+    ;; Check if we were triggered because of a sprite collision
+    and #VIC_Int_SpSpCollide
+    beq .out
+
+    ;; Clear out the collision register
+    lda VIC_SpSpCollide
+
+    ;; Set the collision flag for interpretation later
+    sta CollisionFlag
 
 .out:
     pla
@@ -494,8 +593,6 @@ FixupPositions:
     rts
 }
 
-
-
 !zone UpdateSpritePositions {
 UpdateSpritePositions:
     ;; Prep stack for MSB bits
@@ -550,6 +647,24 @@ CycleBulletColors:
     cpx #$01
     bne .loop
 
+    rts
+}
+
+!zone UpdateScore {
+UpdateScore:
+    lda Player1Score
+    clc
+    adc #'0'
+    sta Player1ScorePtr
+    lda #Color_Red
+    sta Player1ColorPtr
+
+    lda Player2Score
+    clc
+    adc #'0'
+    sta Player2ScorePtr
+    lda #Color_LtBlue
+    sta Player2ColorPtr
     rts
 }
 
@@ -668,4 +783,16 @@ BulletSpeed = 4
 
 ShootDelayCounter: !by $00, $00
 ShootDelay = 15                 ; 15 frames of delay between firing
+
+Player1Score:    !by $00
+Player2Score:    !by $00
+
+!addr {
+Player1ScorePtr = $0400
+Player2ScorePtr = $0427
+Player1ColorPtr = $d800
+Player2ColorPtr = $d827
+}
+
+CollisionFlag:   !by $00
 }
