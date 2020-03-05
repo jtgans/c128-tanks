@@ -3,9 +3,9 @@
 !source "macros.a"
 
 !zone BASIC {
-	* = $1c01
+    * = $1c01
 
-	!wo  .EndOfText             ; Pointer to end of text
+    !wo  .EndOfText             ; Pointer to end of text
     !wo  $000a                  ; Line number 10
     !pet $9e, "4864", $00       ; SYS4864\0
     !by  $00, $00               ; End of Text Token
@@ -14,51 +14,51 @@
 
 !addr {
 !zone SystemVarsAndRegisters {
-	IRQHandlerPtr   = $0314
+    IRQHandlerPtr   = $0314
     IRQHandlerPtrHi = $0315
 
-	CustomChars   = $2000
-	Character_ROM = $d000
+    CustomChars   = $2000
+    Character_ROM = $d000
 
     SpritePtrStart   = $07f8
-	SpriteColorStart = $d027
+    SpriteColorStart = $d027
     SpritePosStart   = $d000
-	SpriteXMSB       = $d010
+    SpriteXMSB       = $d010
 
-	Joystick2     = $dc00
+    Joystick2     = $dc00
     Joystick1     = $dc01
 
-	TextStart     = $0400
-	SpriteEn      = $d015
-	BgColor       = $D021
-	BorderColor   = $D020
+    TextStart     = $0400
+    SpriteEn      = $d015
+    BgColor       = $D021
+    BorderColor   = $D020
 
     MMU_Control   = $ff00
 
     VIC_Raster      = $d012
-	VIC_Interrupt   = $d019
-	VIC_SpSpCollide = $d01e
-	VIC_Keyboard    = $d02f
+    VIC_Interrupt   = $d019
+    VIC_SpSpCollide = $d01e
+    VIC_Keyboard    = $d02f
 }
 }
 
 !zone Init {
-	* = $1300
+    * = $1300
 
 Init:
-	cld
+    cld
 
     ;; Disable BASIC IRQs
     lda #$ff
-	sta $d8
+    sta $d8
     sta $12fd
 
-	;; Disable BASIC, leave I/O, Kernal, and Character ROMs
-	lda #$00
+    ;; Disable BASIC, leave I/O, Kernal, and Character ROMs
+    lda #$00
     sta MMU_Control
 
-	jsr ClearTextScreen
-	jsr FadeToBlack
+    jsr ClearTextScreen
+    jsr FadeToBlack
 
     jmp GameLoop
 }
@@ -79,13 +79,13 @@ FadeToBlack:
     sta BgColor
     lda .backgd, x
     sta BorderColor
-	beq +
+    beq +
 
-	ldy #100
+    ldy #100
     jsr BusyDelay
-	inx
+    inx
 
-	jmp .loop
+    jmp .loop
 +
 
     rts
@@ -96,7 +96,7 @@ ClearTextScreen:
     ldx #$00
 
 !macro .SetToMaxChar .address {
-	lda .address, x
+    lda .address, x
     cmp #$20
     beq +
 
@@ -106,12 +106,12 @@ ClearTextScreen:
 }
 
 .loop:
-	+.SetToMaxChar TextStart
+    +.SetToMaxChar TextStart
     +.SetToMaxChar TextStart + $100
     +.SetToMaxChar TextStart + $200
     +.SetToMaxChar TextStart + $300
     inx
-	bne .loop
+    bne .loop
 
 !macro .DecToZero .address {
     lda .address, x
@@ -121,12 +121,12 @@ ClearTextScreen:
 +
 }
 
-	ldy #128
+    ldy #128
 .dec_loop:
-	+.DecToZero TextStart
-	+.DecToZero TextStart + $100
-	+.DecToZero TextStart + $200
-	+.DecToZero TextStart + $300
+    +.DecToZero TextStart
+    +.DecToZero TextStart + $100
+    +.DecToZero TextStart + $200
+    +.DecToZero TextStart + $300
     inx
     bne .dec_loop
     dey
@@ -138,7 +138,7 @@ ClearTextScreen:
 ;;; Y - number of times to wait
 !zone BusyDelay {
 BusyDelay:
-	+SaveRegisters
+    +SaveRegisters
     ldx #$00
 
 .loop:
@@ -147,7 +147,7 @@ BusyDelay:
     dey
     bne .loop
 
-	+RestoreRegisters
+    +RestoreRegisters
 
     rts
 }
