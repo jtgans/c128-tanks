@@ -342,6 +342,7 @@ MaybeSpawnBullet:
 
     ;; Move the bullet early so it gets off the player
     jsr UpdateSingleBullet
+    jsr UpdateSingleBullet
 
     ;; Re-enable interrupts
     cli
@@ -423,9 +424,16 @@ UpdateSingleBullet:
 HandleCollision:
 .checkPlayer1:
     lda CollisionFlag
-    and #%111111.1
-    beq .checkPlayer2
 
+    ;; Check collision flag
+    lsr                         ; Sprite 0 to carry
+    bcc .checkPlayer2           ; if clear, skip
+
+    ;; Verify collision with bullets
+    lsr                         ; Skip sprite 1 flag
+    beq .checkPlayer2           ; if zero, skip
+
+    ;; Player 1 hit, cycle colors
     ldx #$0a
 -   inc SpriteColorStart
     ldy #$20
@@ -438,8 +446,14 @@ HandleCollision:
 
 .checkPlayer2:
     lda CollisionFlag
-    and #%1111111.
-    beq .return
+
+    ;; Check Collision flag
+    lsr                         ; Throw away sprite 0
+    lsr                         ; Sprite 1 to carry
+    bcc .return                 ; no collision
+
+    ;; Verify collision with bullets
+    beq .return                 ; no collision if zero
 
     ldx #$0a
 -   inc SpriteColorStart + 1
@@ -448,7 +462,7 @@ HandleCollision:
     dex
     bne -
 
-    inc Player2Score
+    inc Player1Score
     jmp .resetGame
 
 .return:
@@ -459,13 +473,21 @@ HandleCollision:
     rts
 
 .resetGame:
+    sei
+
     +InitSprite 0, TankDown, DirDown, Color_Red,    20, 20
     +InitSprite 1, TankUp,   DirUp,   Color_LtBlue, 128, 159
 !for i, 2, 7 {
     +InitSprite i, Bullet,   0,       Color_Black,  74, 90
 }
-    ldy #100
+
+    jsr UpdateSpritePositions
+
+    ;; Delay the game start
+    ldy #$ff
     jsr BusyDelay
+
+    cli
 
     jmp .return
 }
