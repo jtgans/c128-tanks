@@ -131,7 +131,102 @@ GameLoop:
     sta FrameStartFlag
 
 FrameStart:
+    ;; Handle input for both 1st and 2nd player
+    ldx #$00
+    jsr HandleInput
+    inx
+    jsr HandleInput
+
+    jsr FixupPositions
+
     jmp GameLoop
+}
+
+!zone HandleInput {
+HandleInput:
+    ;; ShadowSpritePos is coordinate pairs, so we have to have a stride of two
+    ;; to index into it. Store in X so we can use both player number (Y) and
+    ;; ShadowSpritePos offsets.
+    txa
+    tay
+    asl
+    tax
+
+    ;; X contains the coordinate pair offset (stride 2)
+    ;; Y contains the player number offset (stride 1)
+
+    ;; Update tank position based upon Joystick
+    sei
+    lda #$ff
+    sta Joystick2               ; Force joystick outputs on (shared with keyboard)
+    sta VIC_Keyboard            ; Force VIC-II keyboard outputs on (shared with joystick)
+    lda Joystick2, y            ; Safe to read joystick now (keyboard won't interfere)
+    cli
+
+    ;; Shift left so we can skip past bits 5-7 and check fire first
+    asl
+    asl
+    asl
+
+    asl
+    bcc .ckfire
+    asl
+    bcc .ckright
+    asl
+    bcc .ckleft
+    asl
+    bcc .ckdown
+    asl
+    bcc .ckup
+    rts
+
+.ckleft:
+!zn {
+    dec ShadowSpritePos, x      ; stride 2
+
+    lda #TankLeft / 64
+    sta SpritePtrStart, y
+    lda #DirLeft
+    sta SpriteFacing, y
+    rts
+}
+
+.ckup:
+!zn {
+    dec ShadowSpritePos + 1, x  ; stride 2
+
+    lda #TankUp / 64
+    sta SpritePtrStart, y
+    lda #DirUp
+    sta SpriteFacing, y
+    rts
+}
+
+.ckright:
+!zn {
+    inc ShadowSpritePos, x      ; stride 2
+
+    lda #TankRight / 64
+    sta SpritePtrStart, y
+    lda #DirRight
+    sta SpriteFacing, y
+    rts
+}
+
+.ckdown:
+!zn {
+    inc ShadowSpritePos + 1, x  ; stride 2
+
+    lda #TankDown / 64
+    sta SpritePtrStart, y
+    lda #DirDown
+    sta SpriteFacing, y
+    rts
+}
+
+.ckfire:
+    ;; Fill in later
+    rts
 }
 
 !zone InterruptCallback {
@@ -171,6 +266,70 @@ MaybeTriggerFrame:
     pla
     rts
 }
+
+!zone FixupPositions {
+FixupPositions:
+    ldx #$00
+    ldy #$00
+
+.checkX:
+    lda ShadowSpritePos, x
+    cmp #MaxXCoord
+    bcc .checkY                 ; If X > MaxXCoord, we're out of bounds
+
+    ;; Set direction to zero, since we've been stopped
+    pha
+    lda #$00
+    sta SpriteFacing, y
+    pla
+
+    ;; Compare to the midpoint of OOB space
+    cmp #((256 - MaxXCoord) >> 1) + MaxXCoord
+    bcc .setMaxX                ; Set to max X or min X, depending on which is closer
+    bcs .setMinX
+.setMaxX:
+    lda #MaxXCoord
+    jmp .storeX
+.setMinX:
+    lda #0
+.storeX:
+    sta ShadowSpritePos, x
+
+.checkY:
+    lda ShadowSpritePos + 1, x
+    cmp #MaxYCoord
+    bcc .next                   ; If Y > MaxYCoord, we're out of bounds
+
+    ;; Set direction to zero, since we've been stopped
+    pha
+    lda #$00
+    sta SpriteFacing, y
+    pla
+
+    ;; Compare to the midpoint of OOB space
+    cmp #((256 - MaxYCoord) >> 1) + MaxXCoord
+    bcc .setMaxY                ; Set to max Y or min Y, depending on which is closer
+    bcs .setMinY
+.setMaxY:
+    lda #MaxYCoord
+    jmp .storeY
+.setMinY:
+    lda #0
+.storeY:
+    sta ShadowSpritePos + 1, x
+
+.next:
+    inx
+    inx
+    iny
+
+    cpx #$0f
+    bmi .checkX
+
+    rts
+}
+
+
 
 !zone UpdateSpritePositions {
 UpdateSpritePositions:
