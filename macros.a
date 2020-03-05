@@ -7,6 +7,10 @@
 	Kernal_GetChar        = $ffe4
 }
 	
+    VIC_Int_Scanline    = %.......1
+    VIC_Int_SpFgCollide = %......1.
+    VIC_Int_SpSpCollide = %.....1..
+
     Color_Black   = 0
     Color_White   = 1
     Color_Red     = 2

@@ -91,16 +91,85 @@ Init:
     lda #$ff
     sta SpriteEn
 
+    jsr WedgeInterruptRoutine
+
     jmp GameLoop
+}
+
+!zone WedgeInterruptRoutine {
+WedgeInterruptRoutine:
+    sei
+
+    ;; Save system ISR
+    lda IRQHandlerPtr
+    sta SysISRPtr
+    lda IRQHandlerPtrHi
+    sta SysISRPtrHi
+
+    ;; Install our ISR
+    lda #<InterruptCallback
+    sta IRQHandlerPtr
+    lda #>InterruptCallback
+    sta IRQHandlerPtrHi
+
+    ;; Set the raster trigger for triggering each frame
+    lda #FrameStartRasterLine
+    sta VIC_Raster
+
+    cli
+    rts
 }
 
 !zone GameLoop {
 GameLoop:
+    ;; Ensure we only process input during vblank, once per frame
+    bit FrameStartFlag
+    bpl GameLoop
+
+    ;; Clear the frame start flag
+    lda #$00
+    sta FrameStartFlag
 
 FrameStart:
-    jsr UpdateSpritePositions
-
     jmp GameLoop
+}
+
+!zone InterruptCallback {
+InterruptCallback:
+    ;; Ack the interrupts from the VIC
+    lda VIC_Interrupt
+
+    ;; Check on the reason why we were called
+    jsr MaybeTriggerFrame
+
+    ;; Handle other functions not tightly coupled with the IRQs
+    jsr UpdateSpritePositions
+    jsr CycleBulletColors
+
+    ;; Give control back to the system ISR
+    jmp (SysISRPtr)
+}
+
+!zone MaybeTriggerFrame {
+MaybeTriggerFrame:
+    ;; Save A, since we'll use it in other triggers
+    pha
+
+    ;; Check if we were triggered by the raster trigger
+    and #VIC_Int_Scanline
+    beq .out
+
+    ;; Set the frame start flag
+    lda #$ff
+    sta FrameStartFlag
+
+    ;; Re-set the raster trigger
+    lda #FrameStartRasterLine
+    sta VIC_Raster
+
+.out:
+    pla
+    rts
 }
 
 !zone UpdateSpritePositions {
@@ -140,6 +209,22 @@ UpdateSpritePositions:
     ;; Update the MSB
     pla
     sta SpriteXMSB
+
+    rts
+}
+
+!zone CycleBulletColors {
+CycleBulletColors:
+    ;; Eight sprites
+    ldx #$08
+
+.loop:
+    inc SpriteColorStart, x
+    dex
+
+    ;; Skip the first two sprites
+    cpx #$01
+    bne .loop
 
     rts
 }
@@ -229,6 +314,13 @@ BusyDelay:
 }
 
 !zone Globals {
+;;; System IRQ pointer
+SysISRPtr:     !by $00
+SysISRPtrHi:   !by $00
+
+FrameStartFlag:  !by $00
+FrameStartRasterLine = 250
+
 ;;; Tracks the direction the sprite last moved in. Zero means it is dead.
 SpriteFacing:   !fill 16, $00
 SpriteFacingEnd:
