@@ -7,9 +7,9 @@
 !source "sprites.a"
 
 !zone BASIC {
-	* = $1c01
+    * = $1c01
 
-	!wo  .EndOfText             ; Pointer to end of text
+    !wo  .EndOfText             ; Pointer to end of text
     !wo  $000a                  ; Line number 10
     !pet $9e, "4864", $00       ; SYS4864\0
     !by  $00, $00               ; End of Text Token
@@ -21,124 +21,124 @@
 }
 
 !zone SystemVarsAndRegisters {
-	IRQHandlerPtr   = $0314
+    IRQHandlerPtr   = $0314
     IRQHandlerPtrHi = $0315
 
-	CustomChars   = $2000
-	Character_ROM = $d000
+    CustomChars   = $2000
+    Character_ROM = $d000
 
     SpritePtrStart   = $07f8
-	SpriteColorStart = $d027
+    SpriteColorStart = $d027
     SpritePosStart   = $d000
-	SpriteXMSB       = $d010
+    SpriteXMSB       = $d010
 
-	Joystick2     = $dc00
+    Joystick2     = $dc00
     Joystick1     = $dc01
 
-	TextStart     = $0400
-	SpriteEn      = $d015
-	BgColor       = $D021
-	BorderColor   = $D020
+    TextStart     = $0400
+    SpriteEn      = $d015
+    BgColor       = $D021
+    BorderColor   = $D020
 
     MMU_Control   = $ff00
 
     VIC_Raster      = $d012
-	VIC_Interrupt   = $d019
-	VIC_SpSpCollide = $d01e
-	VIC_Keyboard    = $d02f
+    VIC_Interrupt   = $d019
+    VIC_SpSpCollide = $d01e
+    VIC_Keyboard    = $d02f
 }
 }
 
 !zone Init {
-	* = $1300
+    * = $1300
 
 !macro .InitSprite .spriteno, .shapePtr, .facing, .color, .x, .y {
-	;; Set sprite shape
+    ;; Set sprite shape
     lda #.shapePtr / 64
     sta SpritePtrStart + .spriteno
 
     ;; Set sprite color
-	lda #.color
-	sta SpriteColorStart + .spriteno
+    lda #.color
+    sta SpriteColorStart + .spriteno
 
-	;; Set sprite position -- stride is 2, hence the multiply
-	ldx #.x
+    ;; Set sprite position -- stride is 2, hence the multiply
+    ldx #.x
     stx ShadowSpritePos + (.spriteno * 2)
     ldy #.y
     sty ShadowSpritePos + (.spriteno * 2) + 1
 
-	;; Set facing direction
+    ;; Set facing direction
     lda #.facing
     sta SpriteFacing + .spriteno
 }
 
 Init:
-	cld
+    cld
 
     ;; Disable BASIC IRQs
     lda #$ff
-	sta $d8
+    sta $d8
     sta $12fd
 
-	;; Disable BASIC, leave I/O, Kernal, and Character ROMs
-	lda #$00
+    ;; Disable BASIC, leave I/O, Kernal, and Character ROMs
+    lda #$00
     sta MMU_Control
 
-	jsr ClearTextScreen
-	jsr FadeToBlack
+    jsr ClearTextScreen
+    jsr FadeToBlack
     jsr WedgeInterruptRoutine
 
-	+.InitSprite 0, TankDown, DirDown, Color_Red,    0, 0
-	+.InitSprite 1, TankUp,   DirUp,   Color_LtBlue, 148, 179
+    +.InitSprite 0, TankDown, DirDown, Color_Red,    0, 0
+    +.InitSprite 1, TankUp,   DirUp,   Color_LtBlue, 148, 179
 !for i, 2, 7 {
-	+.InitSprite i, Bullet,   0,       Color_Black,  0, (i - 2) * 10
+    +.InitSprite i, Bullet,   0,       Color_Black,  0, (i - 2) * 10
 }
 
-	;; Enable all sprites by default
+    ;; Enable all sprites by default
     lda #$ff
-	sta SpriteEn
+    sta SpriteEn
 
     jmp GameLoop
 }
 
 !zone GameLoop {
 GameLoop:
-	;; Ensure we only process input update during vblank, once per frame
+    ;; Ensure we only process input update during vblank, once per frame
     bit FrameStartFlag
     bpl GameLoop
 
-	;; Clear the frame start flag
-	lda #$00
-	sta FrameStartFlag
+    ;; Clear the frame start flag
+    lda #$00
+    sta FrameStartFlag
 
 FrameStart:
-	jsr HandleCollision
+    jsr HandleCollision
 
-	;; Handle input for both 1st and 2nd player
-	ldx #$00
-	jsr HandleInput
-	inx
-	jsr HandleInput
+    ;; Handle input for both 1st and 2nd player
+    ldx #$00
+    jsr HandleInput
+    inx
+    jsr HandleInput
 
-	jsr UpdateBullets
-	jsr FixupPositions
-	jsr HandleTimers
-	jsr MarkDeadSprites
+    jsr UpdateBullets
+    jsr FixupPositions
+    jsr HandleTimers
+    jsr MarkDeadSprites
 
     jmp GameLoop
 }
 
 !zone MarkDeadSprites {
 MarkDeadSprites:
-	lda #0
-	ldx #2                      ; skip tanks
+    lda #0
+    ldx #2                      ; skip tanks
 
 .loop:
     lda SpriteFacing, x
-	bne .next
+    bne .next
 
     ;; Value is zero, mark as dead
-	lda #Blank / 64
+    lda #Blank / 64
     sta SpritePtrStart, x
 
 .next:
@@ -153,7 +153,7 @@ MarkDeadSprites:
 HandleTimers:
     lda ShootDelayCounter
     beq .nextPlayer
-	dec ShootDelayCounter
+    dec ShootDelayCounter
 
 .nextPlayer:
     lda ShootDelayCounter + 1
@@ -166,49 +166,49 @@ HandleTimers:
 
 !zone HandleCollision {
 HandleCollision:
-	;; Set the border color based upon collision
-	lda CollisionFlag
+    ;; Set the border color based upon collision
+    lda CollisionFlag
     tax
 
     bne .borderRed
 .borderBlack:
     lda #Color_Black
-	jmp .next
+    jmp .next
 .borderRed:
-	lda #Color_Red
+    lda #Color_Red
 .next:
     sta BorderColor
 
-	;; Clear the collision flag
-	lda #$00
+    ;; Clear the collision flag
+    lda #$00
     sta CollisionFlag
 
-	rts
+    rts
 }
 
 !zone FixupPositions {
 FixupPositions:
-	ldx #$00
-	ldy #$00
+    ldx #$00
+    ldy #$00
 
 .checkX:
     lda ShadowSpritePos, x
-	cmp #MaxXCoord
+    cmp #MaxXCoord
     bcc .checkY                 ; If X > MaxXCoord, we're out of bounds
 
     ;; Set direction to zero, since we've been stopped
-	pha
-	lda #$00
-	sta SpriteFacing, y
+    pha
+    lda #$00
+    sta SpriteFacing, y
     pla
 
-	;; Compare to the midpoint of OOB space
-	cmp #((256 - MaxXCoord) >> 1) + MaxXCoord
+    ;; Compare to the midpoint of OOB space
+    cmp #((256 - MaxXCoord) >> 1) + MaxXCoord
     bcc .setMaxX                ; Set to max X or min X, depending on which is closer
     bcs .setMinX
 .setMaxX:
     lda #MaxXCoord
-	jmp .storeX
+    jmp .storeX
 .setMinX:
     lda #0
 .storeX:
@@ -216,52 +216,52 @@ FixupPositions:
 
 .checkY:
     lda ShadowSpritePos + 1, x
-	cmp #MaxYCoord
+    cmp #MaxYCoord
     bcc .next                   ; If Y > MaxYCoord, we're out of bounds
 
     ;; Set direction to zero, since we've been stopped
-	pha
-	lda #$00
-	sta SpriteFacing, y
+    pha
+    lda #$00
+    sta SpriteFacing, y
     pla
 
-	;; Compare to the midpoint of OOB space
+    ;; Compare to the midpoint of OOB space
     cmp #((256 - MaxYCoord) >> 1) + MaxXCoord
-	bcc .setMaxY                ; Set to max Y or min Y, depending on which is closer
+    bcc .setMaxY                ; Set to max Y or min Y, depending on which is closer
     bcs .setMinY
 .setMaxY:
     lda #MaxYCoord
     jmp .storeY
 .setMinY:
-	lda #0
+    lda #0
 .storeY:
-	sta ShadowSpritePos + 1, x
+    sta ShadowSpritePos + 1, x
 
 .next:
-	inx
-	inx
-	iny
+    inx
+    inx
+    iny
 
     cpx #$0f
-	bmi .checkX
+    bmi .checkX
 
     rts
 }
 
 !zone UpdateBullets {
 UpdateBullets:
-	;; Start from sprite 2 -- we increment at the top of the loop
-	ldx #$01
+    ;; Start from sprite 2 -- we increment at the top of the loop
+    ldx #$01
     txa
 
-	;; Multiply by 2 for stride
+    ;; Multiply by 2 for stride
     asl
     tay
 
-	;; X contains the facing offset
+    ;; X contains the facing offset
     ;; Y contains the position offset
 .next:
-	inx
+    inx
     iny
     iny
 
@@ -269,11 +269,11 @@ UpdateBullets:
     beq .return                 ; Stop at 8
 
     lda SpriteFacing, x
-	beq .next                   ; Skip dead sprites
+    beq .next                   ; Skip dead sprites
 
-	lsr
+    lsr
     bcs .moveUp
-	lsr
+    lsr
     bcs .moveDown
     lsr
     bcs .moveLeft
@@ -284,65 +284,65 @@ UpdateBullets:
     rts
 
 .moveUp:
-	lda ShadowSpritePos + 1, y
-	clc
+    lda ShadowSpritePos + 1, y
+    clc
     adc #-BulletSpeed
-	sta ShadowSpritePos + 1, y
+    sta ShadowSpritePos + 1, y
     jmp .next
 
 .moveDown:
-	lda ShadowSpritePos + 1, y
-	clc
+    lda ShadowSpritePos + 1, y
+    clc
     adc #BulletSpeed
-	sta ShadowSpritePos + 1, y
+    sta ShadowSpritePos + 1, y
     jmp .next
 
 .moveLeft:
-	lda ShadowSpritePos, y
-	clc
+    lda ShadowSpritePos, y
+    clc
     adc #-BulletSpeed
-	sta ShadowSpritePos, y
-	jmp .next
+    sta ShadowSpritePos, y
+    jmp .next
 
 .moveRight:
-	lda ShadowSpritePos, y
-	clc
+    lda ShadowSpritePos, y
+    clc
     adc #BulletSpeed
-	sta ShadowSpritePos, y
+    sta ShadowSpritePos, y
     jmp .next
 }
 
 !zone HandleInput {
 HandleInput:
-	;; ShadowSpritePos is coordinate pairs, so we have to have a stride of two
+    ;; ShadowSpritePos is coordinate pairs, so we have to have a stride of two
     ;; to index into it. Store in X so we can use both player number (Y) and
     ;; ShadowSpritePos offsets.
-	txa
-	tay
+    txa
+    tay
     asl
     tax
 
-	;; X contains the coordinate pair offset (stride 2)
+    ;; X contains the coordinate pair offset (stride 2)
     ;; Y contains the player number offset (stride 1)
 
-	;; Update tank position based upon Joystick
-	sei
+    ;; Update tank position based upon Joystick
+    sei
     lda #$ff
-	sta Joystick2               ; Force joystick outputs on (shared with keyboard)
+    sta Joystick2               ; Force joystick outputs on (shared with keyboard)
     sta VIC_Keyboard            ; Force VIC-II keyboard outputs on (shared with joystick)
-	lda Joystick2, y            ; Safe to read joystick now (keyboard won't interfere)
-	cli
+    lda Joystick2, y            ; Safe to read joystick now (keyboard won't interfere)
+    cli
 
-	;; Shift left so we can skip past bits 5-7 and check fire first
-	asl
+    ;; Shift left so we can skip past bits 5-7 and check fire first
     asl
-	asl
+    asl
+    asl
 
     asl
     bcc .ckfire
     asl
     bcc .ckright
-	asl
+    asl
     bcc .ckleft
     asl
     bcc .ckdown
@@ -356,7 +356,7 @@ HandleInput:
 
     lda #TankLeft / 64
     sta SpritePtrStart, y
-	lda #DirLeft
+    lda #DirLeft
     sta SpriteFacing, y
     rts
 }
@@ -367,7 +367,7 @@ HandleInput:
 
     lda #TankUp / 64
     sta SpritePtrStart, y
-	lda #DirUp
+    lda #DirUp
     sta SpriteFacing, y
     rts
 }
@@ -378,32 +378,32 @@ HandleInput:
 
     lda #TankRight / 64
     sta SpritePtrStart, y
-	lda #DirRight
+    lda #DirRight
     sta SpriteFacing, y
     rts
 }
 
 .ckdown:
 !zn {
-	inc ShadowSpritePos + 1, x  ; stride 2
+    inc ShadowSpritePos + 1, x  ; stride 2
 
     lda #TankDown / 64
     sta SpritePtrStart, y
-	lda #DirDown
+    lda #DirDown
     sta SpriteFacing, y
     rts
 }
 
 .ckfire:
 !zn {
-	lda ShootDelayCounter, y
+    lda ShootDelayCounter, y
     bne +                       ; If our counter isn't zero, don't spawn
 
-	;; Setup the shooting delay
+    ;; Setup the shooting delay
     lda #ShootDelay
-	sta ShootDelayCounter, y
+    sta ShootDelayCounter, y
 
-	jsr MaybeSpawnBullet
+    jsr MaybeSpawnBullet
 +   rts
 }
 }
@@ -413,9 +413,9 @@ MaybeSpawnBullet:
     ;; X and Y are configured thusly:
     ;; Y: player number
 
-	;; Find a free slot in the facing array
+    ;; Find a free slot in the facing array
     ;; If zero:
-	;;   Set sprite shape pointer
+    ;;   Set sprite shape pointer
     ;;   Copy facing from player facing direction
     ;;   Copy sprite pos from player position
     ;; Else:
@@ -425,8 +425,8 @@ MaybeSpawnBullet:
     ldx #$02
 .loop:
     lda SpriteFacing, x
-	beq .foundFreeSlot
-	inx
+    beq .foundFreeSlot
+    inx
     cpx #$08
     bne .loop
     rts                         ; Didn't find a free slot
@@ -438,11 +438,11 @@ MaybeSpawnBullet:
     lda #Bullet / 64
     sta SpritePtrStart, x
 
-	;; Copy facing direction
+    ;; Copy facing direction
     lda SpriteFacing, y         ; from player
     sta SpriteFacing, x         ; to bullet
 
-	;; Multiply slot number and player number by 2 to handle the striding of the
+    ;; Multiply slot number and player number by 2 to handle the striding of the
     ;; position array.
     tya
     asl
@@ -452,7 +452,7 @@ MaybeSpawnBullet:
     asl
     tax
 
-	;; Copy the position from the player
+    ;; Copy the position from the player
     lda ShadowSpritePos, y
     sta ShadowSpritePos, x
     lda ShadowSpritePos + 1, y
@@ -502,33 +502,33 @@ VIC_Int_SpSpCollide = %.....#..
 
 !zone InterruptCallback {
 InterruptCallback:
-	;; Ack the interrupts from the VIC
-	lda VIC_Interrupt
-	jsr MaybeTriggerFrame
-	jsr CheckCollision
+    ;; Ack the interrupts from the VIC
+    lda VIC_Interrupt
+    jsr MaybeTriggerFrame
+    jsr CheckCollision
 
-	;; Handle other functions not tightly coupled with the IRQs
-	jsr UpdateSpritePositions
-	jsr CycleBulletColors
+    ;; Handle other functions not tightly coupled with the IRQs
+    jsr UpdateSpritePositions
+    jsr CycleBulletColors
 
-	;; Give control back to the system ISR
-	jmp (SysISRPtr)
+    ;; Give control back to the system ISR
+    jmp (SysISRPtr)
 }
 
 !zone CheckCollision {
 CheckCollision:
-	;; Save A, since we'll use it in other triggers
+    ;; Save A, since we'll use it in other triggers
     pha
 
-	;; Check if we were triggered because of a sprite collision
-	and #VIC_Int_SpSpCollide
-	beq .out
+    ;; Check if we were triggered because of a sprite collision
+    and #VIC_Int_SpSpCollide
+    beq .out
 
-	;; Clear out the collision register
-	lda VIC_SpSpCollide
+    ;; Clear out the collision register
+    lda VIC_SpSpCollide
 
-	;; Set the collision flag
-	sta CollisionFlag
+    ;; Set the collision flag
+    sta CollisionFlag
 
 .out:
     pla
@@ -537,18 +537,18 @@ CheckCollision:
 
 !zone MaybeTriggerFrame {
 MaybeTriggerFrame:
-	;; Save A, since we'll use it in other triggers
-	pha
+    ;; Save A, since we'll use it in other triggers
+    pha
 
-	;; Check if we were triggered by the raster trigger
-	and #VIC_Int_Scanline
-	beq .out
+    ;; Check if we were triggered by the raster trigger
+    and #VIC_Int_Scanline
+    beq .out
 
-	;; Set the frame start flag
-	lda #$ff
+    ;; Set the frame start flag
+    lda #$ff
     sta FrameStartFlag
 
-	;; Re-set the raster trigger
+    ;; Re-set the raster trigger
     lda #FrameStartRasterLine
     sta VIC_Raster
 
@@ -560,14 +560,14 @@ MaybeTriggerFrame:
 !zone CycleBulletColors {
 CycleBulletColors:
     ;; Eight sprites
-	ldx #$08
+    ldx #$08
 
 .loop:
-	inc SpriteColorStart, x
+    inc SpriteColorStart, x
     dex
 
-	;; Skip the first two sprites
-	cpx #$01
+    ;; Skip the first two sprites
+    cpx #$01
     bne .loop
 
     rts
@@ -584,40 +584,40 @@ CycleBulletColors:
 ;;;
 !zone UpdateSpritePositions {
 UpdateSpritePositions:
-	;; ;; Prep stack for MSB bits
-	lda #$00
-	pha
+    ;; ;; Prep stack for MSB bits
+    lda #$00
+    pha
 
     ;; Start from 255 (-1) since we increment first in the loop
     ldx #$ff
 
 .updateNextSprite:
-	;; Update X first
+    ;; Update X first
     inx
     lda ShadowSpritePos, x
-	clc
+    clc
     adc #24 / 2                 ; playfield starts at X=24
-	asl                         ; shift MSB to carry
+    asl                         ; shift MSB to carry
     sta SpritePosStart, x
 
-	;; Store MSB in the stack for later
+    ;; Store MSB in the stack for later
     pla
     ror
     pha
 
-	;; Update Y next
+    ;; Update Y next
     inx
-	lda ShadowSpritePos, x
-	clc
+    lda ShadowSpritePos, x
+    clc
     adc #50                     ; playfield starts at Y=50
     sta SpritePosStart, x
 
-	;; On to the next pair
-	cpx #$0f                    ; 16 bytes to update
+    ;; On to the next pair
+    cpx #$0f                    ; 16 bytes to update
     bne .updateNextSprite
 
-	;; Update the MSB
-	pla
+    ;; Update the MSB
+    pla
     sta SpriteXMSB
 
     rts
@@ -625,25 +625,25 @@ UpdateSpritePositions:
 
 !zone WedgeInterruptRoutine {
 WedgeInterruptRoutine:
-	sei
+    sei
 
-	;; Save system ISR
+    ;; Save system ISR
     lda IRQHandlerPtr
     sta SysISRPtr
     lda IRQHandlerPtrHi
     sta SysISRPtrHi
 
-	;; Install our ISR
+    ;; Install our ISR
     lda #<InterruptCallback
     sta IRQHandlerPtr
     lda #>InterruptCallback
     sta IRQHandlerPtrHi
 
-	;; Set the raster trigger for triggering each frame
+    ;; Set the raster trigger for triggering each frame
     lda #FrameStartRasterLine
     sta VIC_Raster
 
-	cli
+    cli
     rts
 }
 
@@ -658,13 +658,13 @@ FadeToBlack:
     sta BgColor
     lda .backgd, x
     sta BorderColor
-	beq +
+    beq +
 
-	ldy #100
+    ldy #100
     jsr BusyDelay
-	inx
+    inx
 
-	jmp .loop
+    jmp .loop
 +
 
     rts
@@ -675,7 +675,7 @@ ClearTextScreen:
     ldx #$00
 
 !macro .SetToMaxChar .address {
-	lda .address, x
+    lda .address, x
     cmp #$20
     beq +
 
@@ -685,12 +685,12 @@ ClearTextScreen:
 }
 
 .loop:
-	+.SetToMaxChar TextStart
+    +.SetToMaxChar TextStart
     +.SetToMaxChar TextStart + $100
     +.SetToMaxChar TextStart + $200
     +.SetToMaxChar TextStart + $300
     inx
-	bne .loop
+    bne .loop
 
 !macro .DecToZero .address {
     lda .address, x
@@ -700,12 +700,12 @@ ClearTextScreen:
 +
 }
 
-	ldy #128
+    ldy #128
 .dec_loop:
-	+.DecToZero TextStart
-	+.DecToZero TextStart + $100
-	+.DecToZero TextStart + $200
-	+.DecToZero TextStart + $300
+    +.DecToZero TextStart
+    +.DecToZero TextStart + $100
+    +.DecToZero TextStart + $200
+    +.DecToZero TextStart + $300
     inx
     bne .dec_loop
     dey
@@ -717,7 +717,7 @@ ClearTextScreen:
 ;;; Y - number of times to wait
 !zone BusyDelay {
 BusyDelay:
-	+SaveRegisters
+    +SaveRegisters
     ldx #$00
 
 .loop:
@@ -726,7 +726,7 @@ BusyDelay:
     dey
     bne .loop
 
-	+RestoreRegisters
+    +RestoreRegisters
 
     rts
 }
