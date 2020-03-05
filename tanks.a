@@ -1,6 +1,7 @@
 ;; -*- asm -*-
 
 !source "macros.a"
+!source "sprites.a"
 
 !zone BASIC {
     * = $1c01
@@ -45,6 +46,26 @@
 !zone Init {
     * = $1300
 
+!macro .InitSprite .spriteno, .shapePtr, .facing, .color, .x, .y {
+    ;; Set sprite shape
+    lda #.shapePtr / 64
+    sta SpritePtrStart + .spriteno
+
+    ;; Set sprite color
+    lda #.color
+    sta SpriteColorStart + .spriteno
+
+    ;; Set sprite position -- stride is 2, hence the multiply
+    ldx #.x
+    stx ShadowSpritePos + (.spriteno * 2)
+    ldy #.y
+    sty ShadowSpritePos + (.spriteno * 2) + 1
+
+    ;; Set facing direction
+    lda #.facing
+    sta SpriteFacing + .spriteno
+}
+
 Init:
     cld
 
@@ -60,12 +81,67 @@ Init:
     jsr ClearTextScreen
     jsr FadeToBlack
 
+    +.InitSprite 0, TankDown, DirDown, Color_Red,    0, 0
+    +.InitSprite 1, TankUp,   DirUp,   Color_LtBlue, 148, 179
+!for i, 2, 7 {
+    +.InitSprite i, Bullet,   0,       Color_Black,  0, (i - 2) * 10
+}
+
+    ;; Enable all sprites by default
+    lda #$ff
+    sta SpriteEn
+
     jmp GameLoop
 }
 
 !zone GameLoop {
 GameLoop:
+
+FrameStart:
+    jsr UpdateSpritePositions
+
     jmp GameLoop
+}
+
+!zone UpdateSpritePositions {
+UpdateSpritePositions:
+    ;; Prep stack for MSB bits
+    lda #$00
+    pha
+
+    ;; Start from 255 (-1) since we increment first in the loop
+    ldx #$ff
+
+.updateNextSprite:
+    ;; Update X first
+    inx
+    lda ShadowSpritePos, x
+    clc
+    adc #24 / 2                 ; playfield starts at X=24
+    asl                         ; shift MSB to carry
+    sta SpritePosStart, x
+
+    ;; Store the MSB in the stack for later
+    pla
+    ror
+    pha
+
+    ;; Update Y next
+    inx
+    lda ShadowSpritePos, x
+    clc
+    adc #50                     ; playfield starts at Y=50
+    sta SpritePosStart, x
+
+    ;; On to the next pair
+    cpx #$0f                    ; 16 bytes to update
+    bne .updateNextSprite
+
+    ;; Update the MSB
+    pla
+    sta SpriteXMSB
+
+    rts
 }
 
 !zone FadeToBlack {
@@ -150,4 +226,24 @@ BusyDelay:
     +RestoreRegisters
 
     rts
+}
+
+!zone Globals {
+;;; Tracks the direction the sprite last moved in. Zero means it is dead.
+SpriteFacing:   !fill 16, $00
+SpriteFacingEnd:
+
+;;; Direction flags
+DirUp           = %.......1
+DirDown         = %......1.
+DirLeft         = %.....1..
+DirRight        = %....1...
+
+;;; Shadow X/Y positions for sprites -- 255 max positions horizontally.
+ShadowSpritePos:     !fill 16, $00
+ShadowSpritePosEnd:
+
+;;; Max visible coordinates
+MaxXCoord = 148
+MaxYCoord = 179
 }
