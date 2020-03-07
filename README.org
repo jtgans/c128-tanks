@@ -1,0 +1,21 @@
+* C128-Tanks!
+
+** What is this?
+
+This is a very simple 2-player versus game designed for the Commodore 128 for a
+short talk I gave about how to write games for old computers, and should prove
+as a good starting point for folks looking to learn how to write code for this
+old machine.
+
+The design is very simple, and the code repository is laid out in such a way
+that you can watch the evolution of the codebase as I develop it by switching
+and diffing between the "techtalk-step-N" branches.
+
+** What tools do I need to build this myself?
+
+You'll need a recent build of the ACME cross assembler and a traditional POSIX
+development environment (ie: make and shell).
+
+** What's the license?
+
+Assume GPLv2.
