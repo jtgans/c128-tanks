@@ -3,6 +3,8 @@
 ;; Border Control Memory 53280
 ;; Background Control Memory 53281
 
+    * = $0dfd
+    jmp 4864
 !source "macros.a"
 !source "sprites.a"
 
